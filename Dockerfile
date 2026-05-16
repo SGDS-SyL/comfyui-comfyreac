@@ -1,0 +1,13 @@
+# clean base image containing only comfyui, comfy-cli and comfyui-manager
+FROM runpod/worker-comfyui:5.8.4-base
+
+# build-time tokens for gated downloads — never baked into final image.
+# pass via: docker build --build-arg HF_TOKEN=$HF_TOKEN ...
+ARG HF_TOKEN=""
+
+# install custom nodes into comfyui
+RUN comfy node install --exit-on-fail comfyui-mixlab-nodes@0.46.0 --mode remote || (echo "WARN: comfyui-mixlab-nodes@0.46.0 unavailable in registry, falling back to latest" >&2 && comfy node install --exit-on-fail comfyui-mixlab-nodes --mode remote)
+RUN comfy node install --exit-on-fail comfyui-reactor
+
+# download models into comfyui
+RUN BACKOFFS="10 20 30 60 90" && for i in 1 2 3 4 5; do HF_TOKEN=$HF_TOKEN comfy model download --url 'https://huggingface.co/fofr/comfyui/resolve/fd30aa2626e62bf07166120e7630656f87f1d6d9/insightface/inswapper_128.onnx' --relative-path models/insightface --filename 'inswapper_128.onnx' && break; if [ $i -eq 5 ]; then echo "model-download failed after 5 attempts" >&2; exit 1; fi; SLEEP=$(echo $BACKOFFS | cut -d ' ' -f $i) && echo "model-download attempt $i failed; retrying in $SLEEP seconds" >&2; sleep $SLEEP; done
